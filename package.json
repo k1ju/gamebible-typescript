@@ -11,6 +11,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@types/express-validator": "^3.0.0",
     "@types/jsonwebtoken": "^9.0.6",
     "aws-sdk": "^2.1609.0",
     "dotenv": "^16.4.5",

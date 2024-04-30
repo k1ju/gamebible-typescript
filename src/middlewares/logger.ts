@@ -1,5 +1,4 @@
-import { NextFunction, Request, RequestHandler, Response } from 'express';
-
+import { RequestHandler } from 'express';
 import { pool } from '../config/postgres';
 
 export class LogData {
