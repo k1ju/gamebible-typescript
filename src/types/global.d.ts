@@ -4,9 +4,18 @@
 import { JwtPayload } from 'jsonwebtoken';
 
 declare global {
+    // namespace jwt {
+    interface JwtPayload {
+        userIdx: string;
+        isAdmin: boolean;
+    }
+    // }
+}
+
+declare global {
     namespace Express {
         interface Request {
-            decoded: { userIdx: string; isAdmin: boolean } | JwtPayload | string;
+            decoded: JwtPayload;
         }
     }
 }
