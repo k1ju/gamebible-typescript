@@ -4,8 +4,14 @@
 declare global {
     namespace Express {
         interface Request {
-            decoded: { userIdx: string };
+            decoded: { userIdx: string; isAdmin: boolean };
         }
+    }
+}
+
+declare global {
+    interface Error {
+        status: number;
     }
 }
 
