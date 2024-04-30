@@ -2,6 +2,12 @@ import dotenv from 'dotenv';
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { logger } from './middlewares/logger';
+import logApi from './routers/log';
+import accountApi from './routers/account';
+import gameApi from './routers/game';
+import postApi from './routers/post';
+import commentApi from './routers/comment';
+import adminApi from './routers/admin';
 
 dotenv.config({ path: '../.env' });
 
@@ -10,13 +16,6 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: false }));
-
-import logApi from './routers/log';
-import accountApi from './routers/account';
-import gameApi from './routers/game';
-import postApi from './routers/post';
-import commentApi from './routers/comment';
-import adminApi from './routers/admin';
 
 app.use(logger);
 app.use('/log', logApi);
