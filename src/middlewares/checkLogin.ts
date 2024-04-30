@@ -1,9 +1,7 @@
 import { RequestHandler } from 'express';
+import jwt from 'jsonwebtoken';
 
-const jwt = require('jsonwebtoken');
-require('dotenv').config();
-
-const checkLogin: RequestHandler = (req, res, next) => {
+export const checkLogin: RequestHandler = (req, res, next) => {
     // `Authorization` 헤더에서 값을 추출
     const authHeader = req.headers.authorization;
 
@@ -23,7 +21,7 @@ const checkLogin: RequestHandler = (req, res, next) => {
             throw error;
         }
 
-        req.decoded = jwt.verify(token, process.env.SECRET_KEY);
+        req.decoded = jwt.verify(token, process.env.SECRET_KEY!);
         next();
     } catch (e) {
         //타입스크립트 에러 처리
@@ -35,5 +33,3 @@ const checkLogin: RequestHandler = (req, res, next) => {
         }
     }
 };
-
-module.exports = checkLogin;

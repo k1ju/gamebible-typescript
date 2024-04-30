@@ -11,6 +11,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@types/jsonwebtoken": "^9.0.6",
     "aws-sdk": "^2.1609.0",
     "dotenv": "^16.4.5",
     "multer": "^1.4.5-lts.1",

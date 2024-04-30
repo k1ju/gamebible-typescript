@@ -1,9 +1,7 @@
 import { RequestHandler } from 'express';
+import jwt from 'jsonwebtoken';
 
-const jwt = require('jsonwebtoken');
-require('dotenv').config();
-
-const checkAdmin: RequestHandler = async (req, res, next) => {
+export const checkAdmin: RequestHandler = async (req, res, next) => {
     let { authorization } = req.headers;
 
     try {
@@ -17,7 +15,14 @@ const checkAdmin: RequestHandler = async (req, res, next) => {
         //authorization 널값체크를 해줬으므로, string확정
         authorization = authorization.split(' ')[1];
 
-        req.decoded = jwt.verify(authorization, process.env.SECRET_KEY);
+        //req.decoded 는 string | jwt.JwtPayload
+        //req.decoded는 반드시 isAdmin을 갖고있어야함
+        req.decoded = jwt.verify(authorization, process.env.SECRET_KEY!);
+
+        //req.decoded가 object가 아니거나, isAdmin이 없다면
+        if (typeof req.decoded != 'object' || !('isAdmin' in req.decoded))
+            throw new Error('no Admin');
+
         const isAdmin = req.decoded.isAdmin;
 
         if (isAdmin != true) {

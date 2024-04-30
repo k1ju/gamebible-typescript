@@ -2,7 +2,7 @@ import router from 'express' Router();
 import { pool } from '../config/postgres';
 import { query, body } from 'express-validator';
 import { handleValidationErrors } from '../middlewares/validator';
-import checkLogin from '../middlewares/checkLogin';
+import {checkLogin} from '../middlewares/checkLogin';
 import { generateNotifications } from '../modules/generateNotification';
 import { uploadS3 } from '../middlewares/upload';
 
