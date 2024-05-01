@@ -6,14 +6,17 @@ import { JwtPayload } from 'jsonwebtoken';
 declare global {
     namespace Express {
         interface Request {
-            decoded: { userIdx: string; isAdmin: boolean } | JwtPayload | string;
+            decoded: {
+                userIdx: string;
+                isAdmin: boolean;
+            };
         }
     }
 }
 
 declare global {
-    interface Error {
-        status: number;
+    interface TotalGamesNumber {
+        count: number;
     }
 }
 

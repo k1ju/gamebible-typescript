@@ -1,22 +1,41 @@
-import router from 'express' Router();
+import { Router } from 'express';
 import { pool } from '../config/postgres';
 import { query, body } from 'express-validator';
 import { handleValidationErrors } from '../middlewares/validator';
 import { checkLogin } from '../middlewares/checkLogin';
 import { generateNotifications } from '../modules/generateNotification';
 import { uploadS3 } from '../middlewares/upload';
+import { GameModel } from '../model/GameModel';
+import { BadRequestException } from '../exception/BadRequestException';
+import { ConflictException } from '../exception/ConflictException';
+import { NoContentException } from '../exception/NoContentException';
+import { PoolClient } from 'pg';
+
+const router = Router();
 
 //게임생성요청
 router.post(
     '/request',
     checkLogin,
-    body('title').trim().isLength({ min: 2 }).withMessage('2글자이상입력해주세요'),
+    body('title').isString().trim().isLength({ min: 2 }).withMessage('2글자이상입력해주세요'), // 미들웨어 타입체크
     handleValidationErrors,
     async (req, res, next) => {
-        const { title } = req.body;
-        const { userIdx } = req.decoded;
+        const title: string = req.body.title;
+
+        //미들웨어에서 타입체킹 안되면 컨트롤러에서한다
+        // if (typeof title !== 'string') {
+        //     throw new Error('error');
+        // }
+
+        const userIdx: string = req.decoded.userIdx;
+
+        // 컨트롤러의 책임
+        // 받아오는 값의 타입이 any가 되면 안 됨
+
+        // query가 자동한 결과에 대한 타입이 명시가 되어있어야함
+        // generic
         try {
-            const selectGameSQLResult = await pool.query(
+            const selectGameSQLResult = await pool.query<GameModel>(
                 `
                 SELECT
                     *
@@ -29,7 +48,8 @@ router.post(
                 [title]
             );
             const existingGame = selectGameSQLResult.rows[0];
-            if (existingGame) return res.status(409).send({ message: '이미존재하는 게임' });
+
+            if (existingGame) throw new ConflictException('That game already exist');
 
             const sql = `
                 INSERT INTO 
@@ -48,14 +68,15 @@ router.post(
 
 //게임목록불러오기
 router.get('/all', async (req, res, next) => {
-    let page = req.query.page || 1;
+    let page: number = Number(req.query.page) || 1;
+
     //20개씩 불러오기
     const skip = (page - 1) * 20;
 
     try {
-        const gameSelectSQLResult = await pool.query(
+        const gameSelectSQLResult = await pool.query<GameModel>(
             `SELECT 
-                idx, user_idx AS "userIdx", title, created_at AS "createdAt"
+                *
             FROM 
                 game
             WHERE 
@@ -73,7 +94,7 @@ router.get('/all', async (req, res, next) => {
 
         if (!gameList.length) return res.status(204).send();
 
-        const totalGamesNumberSQLResult = await pool.query(`
+        const totalGamesNumberSQLResult = await pool.query<TotalGamesNumber>(`
             SELECT
                 count(*)
             FROM
@@ -81,7 +102,7 @@ router.get('/all', async (req, res, next) => {
             WHERE
                 deleted_at IS NULL`);
 
-        const totalGamesNumber = totalGamesNumberSQLResult.rows[0].count;
+        const totalGamesNumber: number = totalGamesNumberSQLResult.rows[0].count;
         const maxPage = Math.ceil(totalGamesNumber / 20);
 
         res.status(200).send({
@@ -90,7 +111,12 @@ router.get('/all', async (req, res, next) => {
                 page: page,
                 skip: skip,
                 count: gameList.length,
-                gameList: gameList,
+                gameList: gameList.map((game) => ({
+                    idx: game.idx,
+                    userIdx: game.user_idx,
+                    title: game.title,
+                    createdAt: game.created_at,
+                })),
             },
         });
     } catch (e) {
@@ -101,12 +127,17 @@ router.get('/all', async (req, res, next) => {
 //게임검색하기
 router.get(
     '/search',
-    query('title').trim().isLength({ min: 2 }).withMessage('2글자 이상입력해주세요'),
+    query('title').isString().trim().isLength({ min: 2 }).withMessage('2글자 이상입력해주세요'),
     handleValidationErrors,
     async (req, res, next) => {
-        const { title } = req.query;
+        const title: string = req.query.title as string;
+
         try {
-            const searchSQLResult = await pool.query(
+            const searchSQLResult = await pool.query<{
+                idx: string;
+                title: string;
+                imgPath: string;
+            }>(
                 `SELECT
                     g.idx, g.title, t.img_path AS "imgPath"
                 FROM
@@ -129,7 +160,7 @@ router.get(
             );
             const selectedGameList = searchSQLResult.rows;
 
-            if (!selectedGameList.length) return res.status(204).send();
+            if (!selectedGameList.length) throw new NoContentException('No content');
 
             res.status(200).send({
                 data: selectedGameList,
@@ -142,10 +173,10 @@ router.get(
 
 //인기게임목록불러오기(게시글순)
 router.get('/popular', async (req, res, next) => {
-    const page = req.query.page || 1;
+    const page = Number(req.query.page);
 
-    let skip;
-    let count;
+    let skip: number;
+    let count: number;
     if (page == 1) {
         //1페이지는 19개 불러오기
         count = 19;
@@ -157,7 +188,7 @@ router.get('/popular', async (req, res, next) => {
     }
 
     try {
-        const totalGamesQueryResult = await pool.query(`
+        const totalGamesQueryResult = await pool.query<TotalGamesNumber>(`
             SELECT
                 count(*)
             FROM
@@ -168,7 +199,12 @@ router.get('/popular', async (req, res, next) => {
         const totalGamesNumber = totalGamesQueryResult.rows[0].count;
         const maxPage = Math.ceil((totalGamesNumber - 19) / 16) + 1;
 
-        const popularSelectSQLResult = await pool.query(
+        const popularSelectSQLResult = await pool.query<{
+            idx: number;
+            title: string;
+            postCount: number;
+            imgPath: string;
+        }>(
             //게시글 수가 많은 게임 순서대로 게임 idx, 제목, 이미지경로 추출
             `
                 SELECT
@@ -197,7 +233,7 @@ router.get('/popular', async (req, res, next) => {
         );
         const popularGameList = popularSelectSQLResult.rows;
 
-        if (!popularGameList.length) return res.status(204).send();
+        if (!popularGameList.length) throw new NoContentException('No content');
 
         res.status(200).send({
             data: {
@@ -215,10 +251,10 @@ router.get('/popular', async (req, res, next) => {
 
 //배너이미지가져오기
 router.get('/:gameidx/banner', async (req, res, next) => {
-    const gameIdx = req.params.gameidx;
+    const gameIdx = req.params.gameidx as string;
     try {
         //삭제되지않은 배너이미지경로 가져오기
-        const bannerSQLResult = await pool.query(
+        const bannerSQLResult = await pool.query<{ imgPath: string }>(
             `
             SELECT
                 img_path AS "imgPath"
@@ -241,10 +277,14 @@ router.get('/:gameidx/banner', async (req, res, next) => {
 
 //히스토리 목록보기
 router.get('/:gameidx/history/all', async (req, res, next) => {
-    const gameIdx = req.params.gameidx;
+    const gameIdx = req.params.gameidx as string;
     try {
         //특정게임 히스토리목록 최신순으로 출력
-        const selectHistorySQLResult = await pool.query(
+        const selectHistorySQLResult = await pool.query<{
+            idx: string;
+            createdAt: string;
+            nickname: string;
+        }>(
             // history idx, 히스토리 제목(YYYY-MM-DD HH24:MI:SS 사용자닉네임) 출력
             `
             SELECT 
@@ -266,7 +306,7 @@ router.get('/:gameidx/history/all', async (req, res, next) => {
             [gameIdx]
         );
 
-        const selectGameSQLResult = await pool.query(
+        const selectGameSQLResult = await pool.query<{ idx: string; title: string }>(
             `
             SELECT
                 idx, title
@@ -295,12 +335,12 @@ router.get('/:gameidx/history/all', async (req, res, next) => {
 
 //히스토리 자세히보기
 router.get('/:gameidx/history/:historyidx?', async (req, res, next) => {
-    let historyIdx = req.params.historyidx;
-    const gameIdx = req.params.gameidx;
+    let historyIdx = req.params.historyidx as string | undefined;
+    const gameIdx = req.params.gameidx as string;
     try {
         if (!historyIdx) {
             //가장 최신 히스토리idx 출력
-            const getLatestHistoryIdxSQLResult = await pool.query(
+            const getLatestHistoryIdxSQLResult = await pool.query<{ max: string }>(
                 `
                 SELECT
                     MAX(idx)
@@ -316,7 +356,15 @@ router.get('/:gameidx/history/:historyidx?', async (req, res, next) => {
             historyIdx = getLatestHistoryIdxSQLResult.rows[0].max;
         }
 
-        const getHistorySQLResult = await pool.query(
+        const getHistorySQLResult = await pool.query<{
+            idx: string;
+            gameIdx: string;
+            userIdx: string;
+            title: string;
+            content: string;
+            createdAt: string;
+            nickname: string;
+        }>(
             //히스토리 idx, gameidx, useridx, 내용, 시간, 닉네임 출력
             `
             SELECT    
@@ -349,17 +397,14 @@ router.get('/:gameidx/history/:historyidx?', async (req, res, next) => {
 router.put(
     '/:gameidx/wiki',
     checkLogin,
-    body('content').trim().isLength({ min: 2 }).withMessage('2글자이상 입력해주세요'),
+    body('content').trim().isString().isLength({ min: 2 }).withMessage('2글자이상 입력해주세요'),
     handleValidationErrors,
     async (req, res, next) => {
         const gameIdx = req.params.gameidx;
         const { userIdx } = req.decoded;
-        const { content } = req.body;
-        console.log('content: ', content);
+        const content = req.body.content as string;
 
-        console.log('게임수정완료API 실행되었습니다');
-
-        let poolClient = null;
+        let poolClient: PoolClient | null = null;
         try {
             poolClient = await pool.connect();
             await poolClient.query(`BEGIN`);
@@ -396,7 +441,7 @@ router.put(
 
             res.status(201).send();
         } catch (e) {
-            await poolClient.query(`ROLLBACK`);
+            if (poolClient) await poolClient.query(`ROLLBACK`);
             next(e);
         } finally {
             if (poolClient) poolClient.release();
