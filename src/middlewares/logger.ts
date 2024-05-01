@@ -1,14 +1,9 @@
-import { NextFunction, Request, Response } from 'express';
-
+import { RequestHandler } from 'express';
 import { pool } from '../config/postgres';
 
-interface ExtendedRequest extends Request {
-    decoded?: { userIdx: number };
-}
-
-interface LogData {
+export class LogData {
     ip: string;
-    idx: number | null;
+    idx: string | null;
     url: string;
     method: string;
     requestedTimestamp: Date;
@@ -17,7 +12,7 @@ interface LogData {
     stackTrace: null;
 }
 
-const logger = async (req: ExtendedRequest, res: Response, next: NextFunction) => {
+export const logger: RequestHandler = async (req, res, next) => {
     const logData: LogData = {
         ip: req.ip!,
         idx: req.decoded ? req.decoded.userIdx : null,
@@ -66,5 +61,3 @@ const logger = async (req: ExtendedRequest, res: Response, next: NextFunction) =
     });
     next();
 };
-
-export { logger };
