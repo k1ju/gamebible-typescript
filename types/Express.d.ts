@@ -15,6 +15,10 @@ declare global {
 }
 
 declare global {
+    interface UserPayload {}
+}
+
+declare global {
     interface TotalGamesNumber {
         count: number;
     }

@@ -1,7 +1,4 @@
-import dotenv from 'dotenv';
 import { Pool, PoolConfig } from 'pg';
-
-dotenv.config({ path: '../.env' });
 
 // null or undefined가 아님을 명시적으로 표기 = !
 // 환경변수로 불러온 값은 null or undefined의 가능성이있기때문

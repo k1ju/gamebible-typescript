@@ -1,9 +1,9 @@
-import { RequestHandler } from 'express';
+import { Request, RequestHandler } from 'express';
 import { pool } from '../config/postgres';
 
 export class LogData {
     ip: string;
-    idx: string | null;
+    idx?: string | null;
     url: string;
     method: string;
     requestedTimestamp: Date;
@@ -12,10 +12,11 @@ export class LogData {
     stackTrace: null;
 }
 
-export const logger: RequestHandler = async (req, res, next) => {
+export const logger: RequestHandler = async (req: Request, res, next) => {
+    // console.log(req.decoded);
     const logData: LogData = {
         ip: req.ip!,
-        idx: req.decoded ? req.decoded.userIdx : null,
+        idx: '',
         url: req.originalUrl,
         method: req.method,
         requestedTimestamp: new Date(),
@@ -23,12 +24,11 @@ export const logger: RequestHandler = async (req, res, next) => {
         status: null,
         stackTrace: null,
     };
-    console.log(req.decoded);
+
     res.on('finish', async () => {
         logData.respondedTimestamp = new Date();
         logData.status = res.locals.error ? res.locals.error.statusCode : res.statusCode;
         logData.stackTrace = res.locals.error ? res.locals.error.stackTrace : null;
-        console.log(logData);
         try {
             await pool.query(
                 `INSERT INTO 
