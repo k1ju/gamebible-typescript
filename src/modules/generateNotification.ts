@@ -12,7 +12,7 @@ class NotificationData {
 }
 
 export const generateNotification = async (option: NotificationData) => {
-    let notificationType = null;
+    let notificationType;
 
     if (option.type == 'MAKE_COMMENT') notificationType = 1;
     else if (option.type == 'MODIFY_GAME') notificationType = 2;

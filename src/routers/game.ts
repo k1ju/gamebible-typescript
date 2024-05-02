@@ -27,7 +27,7 @@ router.post(
         //     throw new Error('error');
         // }
 
-        const userIdx: string = req.decoded.userIdx;
+        const userIdx: string = req.decoded!.userIdx;
 
         // 컨트롤러의 책임
         // 받아오는 값의 타입이 any가 되면 안 됨
@@ -336,7 +336,7 @@ router.get('/:gameidx/history/all', async (req, res, next) => {
 //히스토리 자세히보기
 router.get('/:gameidx/history/:historyidx?', async (req, res, next) => {
     let historyIdx = req.params.historyidx as string | undefined;
-    const gameIdx = req.params.gameidx as string;
+    const gameIdx = req.params.gameidx;
     try {
         if (!historyIdx) {
             //가장 최신 히스토리idx 출력
@@ -401,7 +401,7 @@ router.put(
     handleValidationErrors,
     async (req, res, next) => {
         const gameIdx = req.params.gameidx;
-        const { userIdx } = req.decoded;
+        const { userIdx } = req.decoded!;
         const content = req.body.content as string;
 
         let poolClient: PoolClient | null = null;
@@ -410,7 +410,7 @@ router.put(
             await poolClient.query(`BEGIN`);
 
             //기존 게임수정자들 추출
-            const historyUserSQLResult = await poolClient.query(
+            const historyUserSQLResult = await poolClient.query<{ user_idx: string }>(
                 `SELECT DISTINCT 
                     user_idx
                 FROM
@@ -420,6 +420,8 @@ router.put(
                 [gameIdx]
             );
             let historyUserList = historyUserSQLResult.rows;
+            if (!historyUserList || historyUserList.length == 0)
+                throw new NoContentException('No content');
 
             await generateNotifications({
                 conn: poolClient,
@@ -449,55 +451,6 @@ router.put(
     }
 );
 
-// 임시위키생성
-router.post('/:gameidx/wiki', checkLogin, async (req, res, next) => {
-    const gameIdx = req.params.gameidx;
-    const { userIdx } = req.decoded;
-    try {
-        const makeTemporaryHistorySQLResult = await pool.query(
-            `INSERT INTO 
-                history(game_idx, user_idx, created_at)
-            VALUES
-                ( $1, $2, null)
-            RETURNING
-                idx`,
-            [gameIdx, userIdx]
-        );
-
-        const temporaryHistory = makeTemporaryHistorySQLResult.rows[0];
-        const temporaryHistoryIdx = temporaryHistory.idx;
-        //기존 게임내용 불러오기
-        const getLatestHistorySQLResult = await pool.query(
-            `SELECT 
-                g.title, h.content
-            FROM 
-                history h 
-            JOIN 
-                game g 
-            ON 
-                h.game_idx = g.idx 
-            WHERE 
-                h.game_idx = $1
-            AND
-                h.created_at IS NOT NULL 
-            ORDER BY 
-                h.created_at DESC 
-            limit 
-                1;`,
-            [gameIdx]
-        );
-        const latestHistory = getLatestHistorySQLResult.rows[0];
-
-        res.status(201).send({
-            historyIdx: temporaryHistoryIdx,
-            title: latestHistory.title,
-            content: latestHistory.content,
-        });
-    } catch (e) {
-        next(e);
-    }
-});
-
 // 위키 이미지 업로드
 router.post(
     '/:gameidx/wiki/image',
@@ -506,6 +459,7 @@ router.post(
     async (req, res, next) => {
         const historyIdx = req.params.historyidx;
         const images = req.files;
+        console.log('images: ', images);
 
         try {
             if (!images) return res.status(400).send({ message: '이미지가 없습니다' });
@@ -513,11 +467,11 @@ router.post(
             await pool.query(
                 `INSERT INTO
                     game_img( history_idx, img_path )
-                VALUES ( $1, $2 ) `,
-                [historyIdx, location]
+                VALUES ( $1, $2 ) `
+                // [historyIdx, images[0].location]
             );
 
-            res.status(201).send({ data: location });
+            // res.status(201).send({ data: { location: images[0].location } });
         } catch (e) {
             next(e);
         }
