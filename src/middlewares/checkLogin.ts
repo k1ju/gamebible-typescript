@@ -16,11 +16,9 @@ export const checkLogin: RequestHandler = (req, res, next) => {
 
         //verify반환값이 string일때와 JwtPayload일때 나눠서 분기처리
 
-        const jwtPayload = jwt.verify<{ userIdx: string; isAdmin: boolean }>(
-            token,
-            process.env.SECRET_KEY!
-        );
+        const jwtPayload = jwt.verify(token, process.env.SECRET_KEY!);
 
+        if (typeof jwtPayload == 'string') throw new UnauthorizedException('no token');
         req.decoded = {
             userIdx: jwtPayload.userIdx,
             isAdmin: jwtPayload.isAdmin,
