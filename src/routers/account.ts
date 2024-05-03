@@ -20,6 +20,8 @@ import { NoContentException } from '../exception/NoContentException.js';
 
 const router = Router();
 
+//쿼리반환타입 전부 표시
+
 //로그인
 router.post(
     '/auth',
@@ -36,9 +38,15 @@ router.post(
     handleValidationErrors,
     async (req, res, next) => {
         const { id, pw }: { id: string; pw: string } = req.body;
-
+        console.log('id, pw: ', id, pw);
+        console.log('실행');
         try {
-            const userQuery = `
+            const { rows: userList } = await pool.query<{
+                idx: string;
+                is_admin: string;
+                pw: string;
+            }>(
+                `
             SELECT
             *
             FROM
@@ -46,19 +54,13 @@ router.post(
             JOIN
                 "user" u ON al.user_idx = u.idx
             WHERE
-                al.id = $1 AND u.deleted_at IS NULL`;
+                al.id = $1 AND u.deleted_at IS NULL`,
+                [id]
+            );
 
-            const values = [id];
+            if (userList.length === 0) throw new UnauthorizedException('Invalid login');
 
-            const { rows: userRows } = await pool.query<{
-                idx: string;
-                is_admin: string;
-                pw: string;
-            }>(userQuery, values);
-
-            if (userRows.length === 0) throw new UnauthorizedException('Invalid login');
-
-            const user = userRows[0];
+            const user = userList[0];
 
             const match = await bcrypt.compare(pw, user.pw);
 
@@ -218,27 +220,26 @@ router.post(
     handleValidationErrors,
     async (req, res, next) => {
         try {
-            const { id } = req.body;
+            const { id }: { id: string } = req.body;
 
-            const checkIdSql = `
-        SELECT
-            account_local.*
-        FROM
-            account_local
-        JOIN
-            "user"
-        ON
-            account_local.user_idx = "user".idx
-        WHERE
-            account_local.id = $1
-        AND
-            "user".deleted_at IS NULL;
-        `;
-
-            const values = [id];
-
-            const idResults = await pool.query(checkIdSql, values);
-            if (idResults.rows.length > 0) return res.status(409).send('아이디가 이미 존재합니다.');
+            const { rows: existingIdList } = await pool.query(
+                `
+                SELECT
+                    account_local.*
+                FROM
+                    account_local
+                JOIN
+                    "user"
+                ON
+                    account_local.user_idx = "user".idx
+                WHERE
+                    account_local.id = $1
+                AND
+                    "user".deleted_at IS NULL;
+                `,
+                [id]
+            );
+            if (existingIdList.length != 0) throw new ConflictException('Existing id');
 
             return res.status(200).send('사용 가능한 아이디입니다.');
         } catch (e) {
@@ -257,23 +258,21 @@ router.post(
     handleValidationErrors,
     async (req, res, next) => {
         try {
-            const { nickname } = req.body;
+            const { nickname }: { nickname: string } = req.body;
 
-            const checkNicknameSql = `
-            SELECT
-                *
-            FROM
-                "user"
-            WHERE
-                nickname = $1
-            AND
-                deleted_at IS NULL`;
-
-            const value = [nickname];
-
-            const nicknameResults = await pool.query(checkNicknameSql, value);
-            if (nicknameResults.rows.length > 0)
-                return res.status(409).send('닉네임이 이미 존재합니다.');
+            const { rows: existingNicknameList } = await pool.query(
+                `
+                SELECT
+                    *
+                FROM
+                    "user"
+                WHERE
+                    nickname = $1
+                AND
+                    deleted_at IS NULL`,
+                [nickname]
+            );
+            if (existingNicknameList.length !== 0) throw new ConflictException('Existing nickname');
 
             return res.status(200).send('사용 가능한 닉네임입니다.');
         } catch (e) {
@@ -289,43 +288,40 @@ router.post(
     handleValidationErrors,
     async (req, res, next) => {
         try {
-            const { email } = req.body;
+            const { email }: { email: string } = req.body;
 
-            const checkEmailSql = `
-        SELECT
-            *
-        FROM
-            "user"
-        WHERE
-           email = $1
-        AND
-            deleted_at IS NULL`;
+            const { rows: existingEmailList } = await pool.query(
+                `
+            SELECT
+                *
+            FROM
+                "user"
+            WHERE
+               email = $1
+            AND
+                deleted_at IS NULL`,
+                [email]
+            );
+            if (existingEmailList.length != 0) throw new ConflictException('Existing Email');
 
-            const checkEmailvalue = [email];
-            const emailResults = await pool.query(checkEmailSql, checkEmailvalue);
-            if (emailResults.rows.length > 0) {
-                return res.status(409).send('이메일이 이미 존재합니다.');
-            } else {
-                const verificationCode = generateVerificationCode();
-                const insertQuery = `
+            const verificationCode = generateVerificationCode();
+
+            const { rowCount: newCodeCount } = await pool.query(
+                `
             INSERT INTO
-                email_verification (
-                    email,
-                    code
-                    )
+                email_verification (email,code)
             VALUES
                 ($1, $2)
-            RETURNING *
-            `;
-                const codeValues = [email, verificationCode];
-                const codeResults = await pool.query(insertQuery, codeValues);
-                if (codeResults.rows.length == 0) {
-                    return res.status(401).send('코드 저장 오류');
-                }
-                await sendVerificationEmail(email, verificationCode);
-                await deleteCode(pool);
-                return res.status(200).send('인증 코드가 발송되었습니다.');
-            }
+            RETURNING 
+                *
+            `,
+                [email, verificationCode]
+            );
+            if (newCodeCount == 0) throw new UnauthorizedException('code error');
+
+            await sendVerificationEmail(email, verificationCode);
+            await deleteCode(pool);
+            return res.status(200).send('인증 코드가 발송되었습니다.');
         } catch (e) {
             next(e);
         }
@@ -345,20 +341,21 @@ router.post(
     handleValidationErrors,
     async (req, res, next) => {
         try {
-            const { email, code } = req.body;
-            const checkEmailSql = `
-        SELECT
-            *
-        FROM
-            email_verification
-        WHERE
-            email = $1
-        AND
-            code = $2`;
-            const queryResult = await pool.query(checkEmailSql, [email, code]);
-            if (queryResult.rows.length == 0) {
-                return res.status(204).send('잘못된 인증 코드입니다.');
-            }
+            const { email, code }: { email: string; code: string } = req.body;
+            const { rows: existingCodeList } = await pool.query(
+                `
+            SELECT
+                *
+            FROM
+                email_verification
+            WHERE
+                email = $1
+            AND
+                code = $2`,
+                [email, code]
+            );
+            if (existingCodeList.length == 0) throw new NoContentException('Invalid code');
+
             return res.status(200).send('이메일 인증이 완료되었습니다.');
         } catch (e) {
             next(e);
@@ -369,32 +366,30 @@ router.post(
 // 아이디 찾기
 router.get(
     '/id',
-    query('email').trim().isEmail().withMessage('유효하지 않은 이메일 형식입니다.'),
+    query('email').trim().isString().withMessage('유효하지 않은 이메일 형식입니다.'),
     handleValidationErrors,
     async (req, res, next) => {
         const email = req.query.email as string;
         try {
-            const findIdxSql = `
-            SELECT
-                a.id
-            FROM
-                account_local a
-            JOIN
-                "user" u ON a.user_idx = u.idx
-            WHERE
-                u.email = $1
-            AND
-                u.deleted_at IS NULL;
-        `;
-            const findIdxvalue = [email];
-            const results = await pool.query(findIdxSql, findIdxvalue);
+            const { rows: existingIdList } = await pool.query(
+                `
+                SELECT
+                    a.id
+                FROM
+                    account_local a
+                JOIN
+                    "user" u ON a.user_idx = u.idx
+                WHERE
+                    u.email = $1
+                AND
+                    u.deleted_at IS NULL;
+                `,
+                [email]
+            );
 
-            if (results.rows.length === 0) {
-                return res.status(204).send('일치하는 사용자가 없습니다.');
-            }
-            const foundId = results.rows[0].id;
+            if (existingIdList.length === 0) throw new NoContentException('Invalid Email');
 
-            return res.status(200).send({ id: foundId });
+            return res.status(200).send({ data: { id: existingIdList[0].id } });
         } catch (err) {
             next(err);
         }
@@ -404,10 +399,10 @@ router.get(
 //비밀번호 찾기(이메일 전송)
 router.post(
     '/pw/email',
-    body('email').trim().isEmail().withMessage('유효하지 않은 이메일 형식입니다.'),
+    body('email').trim().isString().isEmail().withMessage('유효하지 않은 이메일 형식입니다.'),
     handleValidationErrors,
     async (req, res, next) => {
-        const { email } = req.body;
+        const { email }: { email: string } = req.body;
 
         try {
             const emailToken = await changePwEmail(email);
@@ -939,16 +934,16 @@ router.delete('/auth/kakao', checkLogin, async (req, res, next) => {
         );
         console.log('user', user[0]);
 
-        // const response = await axios.post(
-        //     'https://kapi.kakao.com/v1/user/unlink',
-        //     `target_id_type=user_id&target_id=${user.id}`,
-        //     {
-        //         headers: {
-        //             'Content-Type': 'application/x-www-form-urlencoded',
-        //             Authorization: `KakaoAK ${SERVICE_APP_ADMIN_KEY}`,
-        //         },
-        //     }
-        // );
+        const response = await axios.post(
+            'https://kapi.kakao.com/v1/user/unlink',
+            `target_id_type=user_id&target_id=${user[0].id}`,
+            {
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    Authorization: `KakaoAK ${SERVICE_APP_ADMIN_KEY}`,
+                },
+            }
+        );
 
         const { rowCount: deleteNumber } = await pool.query(
             `
