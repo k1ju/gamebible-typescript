@@ -3,8 +3,6 @@ import AWS from 'aws-sdk';
 import multer, { Options } from 'multer';
 import multerS3 from 'multer-s3';
 
-console.log('process.env.S3_ACCESS_KEY_ID: ', process.env.S3_ACCESS_KEY_ID);
-
 //aws region 및 자격증명 설정
 const s3 = new AWS.S3({
     accessKeyId: process.env.S3_ACCESS_KEY_ID,

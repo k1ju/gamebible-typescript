@@ -5,7 +5,7 @@ import express = require('express');
 import cors = require('cors');
 import { logger } from './middlewares/logger';
 // import logApi from './routers/log';
-// import accountApi from './routers/account';
+import accountApi from './routers/account';
 import gameApi from './routers/game';
 // import postApi from './routers/post';
 // import commentApi from './routers/comment';
@@ -19,7 +19,7 @@ app.use(express.urlencoded({ limit: '10mb', extended: false }));
 
 app.use(logger);
 // app.use('/log', logApi);
-// app.use('/account', accountApi);
+app.use('/account', accountApi);
 app.use('/game', gameApi);
 // app.use('/post', postApi);
 // app.use('/comment', commentApi);
@@ -36,6 +36,6 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
     });
 });
 
-app.listen(process.env.HTTP_PORT, () => {
+app.listen(3000, () => {
     console.log(`${process.env.HTTP_PORT}번 포트번호 서버실행`);
 });
