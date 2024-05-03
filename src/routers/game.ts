@@ -20,17 +20,9 @@ router.post(
     body('title').isString().trim().isLength({ min: 2 }).withMessage('2글자이상입력해주세요'), // 미들웨어 타입체크
     handleValidationErrors,
     async (req, res, next) => {
-        const title: string = req.body.title;
-
-        //미들웨어에서 타입체킹 안되면 컨트롤러에서한다
-        // if (typeof title !== 'string') {
-        //     throw new Error('error');
-        // }
+        const title = req.body.title as string;
 
         const userIdx: string = req.decoded!.userIdx;
-
-        // 컨트롤러의 책임
-        // 받아오는 값의 타입이 any가 되면 안 됨
 
         // query가 자동한 결과에 대한 타입이 명시가 되어있어야함
         // generic
@@ -51,13 +43,13 @@ router.post(
 
             if (existingGame) throw new ConflictException('That game already exist');
 
-            const sql = `
-                INSERT INTO 
+            await pool.query(
+                `INSERT INTO 
                     request(user_idx, title) 
                 VALUES 
-                    ( $1 ,$2 )`;
-            const values = [userIdx, title];
-            await pool.query(sql, values);
+                    ( $1 ,$2 )`,
+                [userIdx, title]
+            );
 
             res.status(200).send();
         } catch (e) {
@@ -74,7 +66,7 @@ router.get('/all', async (req, res, next) => {
     const skip = (page - 1) * 20;
 
     try {
-        const gameSelectSQLResult = await pool.query<GameModel>(
+        const { rows: gameList } = await pool.query<GameModel>(
             `SELECT 
                 *
             FROM 
@@ -90,9 +82,7 @@ router.get('/all', async (req, res, next) => {
             [skip]
         );
 
-        const gameList = gameSelectSQLResult.rows;
-
-        if (!gameList.length) return res.status(204).send();
+        if (!gameList.length) throw new NoContentException('No content');
 
         const totalGamesNumberSQLResult = await pool.query<TotalGamesNumber>(`
             SELECT
@@ -130,10 +120,10 @@ router.get(
     query('title').isString().trim().isLength({ min: 2 }).withMessage('2글자 이상입력해주세요'),
     handleValidationErrors,
     async (req, res, next) => {
-        const title: string = req.query.title as string;
+        const title = req.query.title as string;
 
         try {
-            const searchSQLResult = await pool.query<{
+            const { rows: gameList } = await pool.query<{
                 idx: string;
                 title: string;
                 imgPath: string;
@@ -158,12 +148,13 @@ router.get(
                     t.deleted_at IS NULL`,
                 [`%${title}%`]
             );
-            const selectedGameList = searchSQLResult.rows;
 
-            if (!selectedGameList.length) throw new NoContentException('No content');
+            if (!gameList.length) throw new NoContentException('No content');
 
             res.status(200).send({
-                data: selectedGameList,
+                data: {
+                    gameList: gameList,
+                },
             });
         } catch (e) {
             next(e);
@@ -199,7 +190,7 @@ router.get('/popular', async (req, res, next) => {
         const totalGamesNumber = totalGamesQueryResult.rows[0].count;
         const maxPage = Math.ceil((totalGamesNumber - 19) / 16) + 1;
 
-        const popularSelectSQLResult = await pool.query<{
+        const { rows: gameList } = await pool.query<{
             idx: number;
             title: string;
             postCount: number;
@@ -231,17 +222,16 @@ router.get('/popular', async (req, res, next) => {
                     $2`,
             [count, skip]
         );
-        const popularGameList = popularSelectSQLResult.rows;
 
-        if (!popularGameList.length) throw new NoContentException('No content');
+        if (!gameList.length) throw new NoContentException('No content');
 
         res.status(200).send({
             data: {
                 maxPage: maxPage,
                 page: page,
                 skip: skip,
-                count: popularGameList.length,
-                gameList: popularGameList,
+                count: gameList.length,
+                gameList: gameList,
             },
         });
     } catch (e) {
@@ -266,9 +256,11 @@ router.get('/:gameidx/banner', async (req, res, next) => {
                 deleted_at IS NULL`,
             [gameIdx]
         );
-        const banner = bannerSQLResult.rows;
+        const bannerImgPath = bannerSQLResult.rows[0];
         res.status(200).send({
-            data: banner,
+            data: {
+                imgPath: bannerImgPath,
+            },
         });
     } catch (e) {
         next(e);
@@ -280,7 +272,7 @@ router.get('/:gameidx/history/all', async (req, res, next) => {
     const gameIdx = req.params.gameidx as string;
     try {
         //특정게임 히스토리목록 최신순으로 출력
-        const selectHistorySQLResult = await pool.query<{
+        const { rows: historyList } = await pool.query<{
             idx: string;
             createdAt: string;
             nickname: string;
@@ -318,8 +310,6 @@ router.get('/:gameidx/history/all', async (req, res, next) => {
             [gameIdx]
         );
         const game = selectGameSQLResult.rows[0];
-
-        const historyList = selectHistorySQLResult.rows;
 
         res.status(200).send({
             data: {
@@ -467,15 +457,15 @@ router.post(
             await pool.query(
                 `INSERT INTO
                     game_img( history_idx, img_path )
-                VALUES ( $1, $2 ) `
-                // [historyIdx, images[0].location]
+                VALUES ( $1, $2 ) `,
+                [historyIdx, images[0].location]
             );
 
-            // res.status(201).send({ data: { location: images[0].location } });
+            res.status(201).send({ data: { location: images[0].location } });
         } catch (e) {
             next(e);
         }
     }
 );
 
-module.exports = router;
+export = router;

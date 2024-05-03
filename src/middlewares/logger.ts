@@ -13,10 +13,10 @@ export class LogData {
 }
 
 export const logger: RequestHandler = async (req: Request, res, next) => {
-    // console.log(req.decoded);
+    console.log(req.decoded);
     const logData: LogData = {
         ip: req.ip!,
-        idx: '',
+        idx: req.decoded ? req.decoded.userIdx : null,
         url: req.originalUrl,
         method: req.method,
         requestedTimestamp: new Date(),
