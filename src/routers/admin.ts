@@ -8,6 +8,8 @@ import { PoolClient } from 'pg';
 import { ConflictException } from '../exception/ConflictException';
 import { BadRequestException } from '../exception/BadRequestException';
 import { GameModel } from '../model/GameModel';
+import { RequestModel } from '../model/RequestModel';
+import { NoContentException } from '../exception/NoContentException';
 
 const router = Router();
 
@@ -129,5 +131,58 @@ router.post(
         }
     }
 );
+
+//승인요청온 게임목록보기
+router.get('/game/request/all', checkLogin, checkAdmin, async (req, res, next) => {
+    const lastIdx = (req.query.lastidx as string) || '99999999';
+    try {
+        let requestList: RequestModel[];
+
+        if (!lastIdx) {
+            // 최신 관리자알람 20개 출력
+            ({ rows: requestList } = await pool.query<RequestModel>(`
+                SELECT
+                    idx, user_idx AS "userIdx", title, created_at AS "createdAt" 
+                FROM
+                    request
+                WHERE 
+                    deleted_at IS NULL
+                ORDER BY
+                    idx DESC
+                LIMIT
+                    20`));
+        } else {
+            // lastIdx보다 작은 관리자알람 20개 출력
+            ({ rows: requestList } = await pool.query<RequestModel>(
+                `
+                SELECT
+                    idx, user_idx AS "userIdx", title, created_at AS "createdAt"
+                FROM
+                    request
+                WHERE 
+                    deleted_at IS NULL
+                AND
+                    idx < $1
+                ORDER BY
+                    idx DESC
+                LIMIT
+                    20`,
+                [lastIdx]
+            ));
+        }
+
+        //요청없는 경우
+        if (!requestList.length) throw new NoContentException('No request');
+
+        res.status(200).send({
+            data: {
+                lastIdx: requestList[requestList.length - 1].idx,
+                requestList: requestList,
+            },
+        });
+    } catch (e) {
+        next(e);
+    }
+});
 
 export = router;
