@@ -1,17 +1,19 @@
 export class GameModel {
     idx: string;
-    user_idx: string;
+    userIdx: string;
     title: string;
-    title_kor: string;
-    title_eng: string;
-    created_at: string;
+    titleKor: string;
+    titleEng: string;
+    createdAt: string;
+    deletedAt: string;
 
     constructor(data: GameModel) {
         this.idx = data.idx;
-        this.user_idx = data.user_idx;
+        this.userIdx = data.userIdx;
         this.title = data.title;
-        this.title_kor = data.title_kor;
-        this.title_eng = data.title_eng;
-        this.created_at = data.created_at;
+        this.titleKor = data.titleKor;
+        this.titleEng = data.titleEng;
+        this.createdAt = data.createdAt;
+        this.deletedAt = data.deletedAt;
     }
 }

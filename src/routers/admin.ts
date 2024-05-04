@@ -185,4 +185,73 @@ router.get('/game/request/all', checkLogin, checkAdmin, async (req, res, next) =
     }
 });
 
+//승인요청 거부
+router.delete('/game/request/:requestidx', checkLogin, checkAdmin, async (req, res, next) => {
+    const requestIdx: string = req.params.requestidx;
+    let poolClient: PoolClient | null = null;
+
+    try {
+        poolClient = await pool.connect();
+        await poolClient.query(`BEGIN`);
+        // 요청삭제
+        await poolClient.query(
+            `UPDATE
+                request
+            SET 
+                deleted_at = now(), is_confirmed = false
+            WHERE 
+                idx = $1`,
+            [requestIdx]
+        );
+
+        // 해당요청
+        const { rows: requestList } = await poolClient.query<RequestModel>(
+            `SELECT
+                idx, user_idx AS "userIdx", title, created_at AS "createdAt"
+            FROM 
+                request
+            WHERE 
+                idx = $1`,
+            [requestIdx]
+        );
+
+        // 추출한 user_idx, 게임제목으로 새로운 게임 생성, 삭제 -> 그래야 거절 알림보낼 수 있음
+        await poolClient.query(
+            `INSERT INTO
+                game(user_idx, title, deleted_at)
+            VALUES
+                ( $1, $2, now())`,
+            [requestList[0].userIdx, requestList[0].title]
+        );
+        // 방금 생성,삭제된 게임idx 추출
+        const { rows: deletedGameList } = await poolClient.query<GameModel>(
+            `SELECT
+                idx, user_idx as "userIdx", title, title_eng AS "titleEng", title_kor AS "titleKor", created_at AS "createdAt", deleted_at AS "deletedAt"  
+            FROM
+                game
+            ORDER BY
+                idx DESC
+            LIMIT
+                1`
+        );
+
+        //알림생성
+        await generateNotification({
+            conn: poolClient,
+            type: 'DENY_GAME',
+            gameIdx: deletedGameList[0].idx,
+            toUserIdx: requestList[0].userIdx,
+        });
+
+        await poolClient.query(`COMMIT`);
+
+        res.status(200).send();
+    } catch (e) {
+        if (poolClient) await poolClient.query(`ROLLBACK`);
+        next(e);
+    } finally {
+        if (poolClient) poolClient.release();
+    }
+});
+
 export = router;
