@@ -38,23 +38,21 @@ router.post(
     handleValidationErrors,
     async (req, res, next) => {
         const { id, pw }: { id: string; pw: string } = req.body;
-        console.log('id, pw: ', id, pw);
-        console.log('실행');
         try {
-            const { rows: userList } = await pool.query<{
-                idx: string;
-                is_admin: string;
-                pw: string;
-            }>(
+            const { rows: userList } = await pool.query<UserModel & { pw: string }>(
                 `
-            SELECT
-            *
-            FROM
-                account_local al
-            JOIN
-                "user" u ON al.user_idx = u.idx
-            WHERE
-                al.id = $1 AND u.deleted_at IS NULL`,
+                SELECT
+                    *
+                FROM
+                    account_local al
+                JOIN
+                    "user" u 
+                ON 
+                    al.user_idx = u.idx
+                WHERE
+                    al.id = $1 
+                AND 
+                    u.deleted_at IS NULL`,
                 [id]
             );
 
@@ -121,61 +119,34 @@ router.post(
             poolClient = await pool.connect();
             await poolClient.query('BEGIN');
 
-            //아이디 중복 확인
-            const { rows: existingIdList } = await poolClient.query(
-                `
-            SELECT
-                account_local.*
-            FROM
-                account_local
-            JOIN
-                "user"
-            ON
-                account_local.user_idx = "user".idx
-            WHERE
-                account_local.id = $1
-            AND
-                "user".deleted_at IS NULL`,
-                [id]
-            );
-            if (existingIdList.length !== 0) throw new ConflictException('Existing id');
-
-            //닉네임 중복 확인
-            const { rows: existingNicknameList } = await poolClient.query(
-                `
-            SELECT
-                *
-            FROM
-                "user"
-            WHERE
-                nickname = $1
-            AND
-                deleted_at IS NULL`,
-                [nickname]
-            );
-
-            if (existingNicknameList.length != 0) throw new ConflictException('Existing nickname');
-
-            //이메일 중복 확인
-            const { rows: existingEmailList } = await poolClient.query(
+            //아이디, 닉네임, 이메일 중복 확인
+            const { rows: existingUserList } = await poolClient.query<UserModel>(
                 `
                 SELECT
-                    *
+                    u.*
                 FROM
-                    "user"
+                    account_local a
+                JOIN
+                    "user" u
+                ON
+                    a.user_idx = u.idx
                 WHERE
-                    email = $1
+                    a.id = $1
+                OR
+                    u.nickname = $2
+                OR
+                    u.email = $3
                 AND
-                    deleted_at IS NULL`,
-                [email]
+                    u.deleted_at IS NULL`,
+                [id, nickname, email]
             );
-            if (existingEmailList.length != 0) throw new ConflictException('Existing nickname');
+            if (existingUserList.length !== 0) throw new ConflictException('Existing user');
 
             // 비밀번호 해싱
             const hashedPw = await hashPassword(pw);
 
             //user테이블 user 추가
-            const { rows: userList } = await poolClient.query(
+            const { rows: userList } = await poolClient.query<{ idx: string }>(
                 `INSERT INTO
                     "user"(nickname,email,is_admin)
                 VALUES 
@@ -187,14 +158,14 @@ router.post(
             if (userList.length === 0) throw new NoContentException('Fail signup');
 
             //account_local테이블 user 추가
-            const { rows: accountList } = await poolClient.query(
+            const { rows: accountList } = await poolClient.query<{ user_idx: string }>(
                 `
                 INSERT INTO
                     account_local (user_idx,id,pw)
                 VALUES 
                     ($1, $2, $3)
                 RETURNING 
-                    *`,
+                    user_idx`,
                 [userList[0].idx, id, hashedPw]
             );
             if (accountList.length === 0) throw new NoContentException('Fail signup');
@@ -222,24 +193,19 @@ router.post(
         try {
             const { id }: { id: string } = req.body;
 
-            const { rows: existingIdList } = await pool.query(
-                `
-                SELECT
-                    account_local.*
+            //id중복확인
+            const { rows: existingUserList } = await pool.query<UserModel>(
+                `SELECT
+                    *
                 FROM
-                    account_local
-                JOIN
-                    "user"
-                ON
-                    account_local.user_idx = "user".idx
+                    account_local a
                 WHERE
-                    account_local.id = $1
+                    a.id = $1
                 AND
-                    "user".deleted_at IS NULL;
-                `,
+                    u.deleted_at IS NULL`,
                 [id]
             );
-            if (existingIdList.length != 0) throw new ConflictException('Existing id');
+            if (existingUserList.length != 0) throw new ConflictException('Existing id');
 
             return res.status(200).send('사용 가능한 아이디입니다.');
         } catch (e) {
@@ -260,19 +226,19 @@ router.post(
         try {
             const { nickname }: { nickname: string } = req.body;
 
-            const { rows: existingNicknameList } = await pool.query(
+            const { rows: existingUserList } = await pool.query<UserModel>(
                 `
                 SELECT
                     *
                 FROM
-                    "user"
+                    "user" u
                 WHERE
                     nickname = $1
                 AND
                     deleted_at IS NULL`,
                 [nickname]
             );
-            if (existingNicknameList.length !== 0) throw new ConflictException('Existing nickname');
+            if (existingUserList.length !== 0) throw new ConflictException('Existing nickname');
 
             return res.status(200).send('사용 가능한 닉네임입니다.');
         } catch (e) {
@@ -290,23 +256,28 @@ router.post(
         try {
             const { email }: { email: string } = req.body;
 
-            const { rows: existingEmailList } = await pool.query(
+            const { rows: existingUserList } = await pool.query<UserModel>(
                 `
-            SELECT
-                *
-            FROM
-                "user"
-            WHERE
-               email = $1
-            AND
-                deleted_at IS NULL`,
+                SELECT
+                    *
+                FROM
+                    "user" u
+                WHERE
+                    email = $1
+                AND
+                    deleted_at IS NULL`,
                 [email]
             );
-            if (existingEmailList.length != 0) throw new ConflictException('Existing Email');
+            if (existingUserList.length != 0) throw new ConflictException('Existing Email');
 
             const verificationCode = generateVerificationCode();
 
-            const { rowCount: newCodeCount } = await pool.query(
+            const { rowCount: newCodeCount } = await pool.query<{
+                idx: string;
+                email: string;
+                code: string;
+                created_at: string;
+            }>(
                 `
             INSERT INTO
                 email_verification (email,code)
@@ -342,7 +313,12 @@ router.post(
     async (req, res, next) => {
         try {
             const { email, code }: { email: string; code: string } = req.body;
-            const { rows: existingCodeList } = await pool.query(
+            const { rows: existingCodeList } = await pool.query<{
+                idx: string;
+                email: string;
+                code: string;
+                created_at: string;
+            }>(
                 `
             SELECT
                 *
@@ -371,14 +347,16 @@ router.get(
     async (req, res, next) => {
         const email = req.query.email as string;
         try {
-            const { rows: existingIdList } = await pool.query(
+            const { rows: existingUserList } = await pool.query<{ id: string }>(
                 `
                 SELECT
-                    a.id
+                    id
                 FROM
                     account_local a
                 JOIN
-                    "user" u ON a.user_idx = u.idx
+                    "user" u 
+                ON 
+                    a.user_idx = u.idx
                 WHERE
                     u.email = $1
                 AND
@@ -387,9 +365,9 @@ router.get(
                 [email]
             );
 
-            if (existingIdList.length === 0) throw new NoContentException('Invalid Email');
+            if (existingUserList.length === 0) throw new NoContentException('Invalid Email');
 
-            return res.status(200).send({ data: { id: existingIdList[0].id } });
+            return res.status(200).send({ data: { id: existingUserList[0].id } });
         } catch (err) {
             next(err);
         }
@@ -429,7 +407,7 @@ router.put(
         try {
             const hashedPw = await hashPassword(pw); // 비밀번호 해싱
 
-            const { rows: updatePwList } = await pool.query(
+            const { rows: updatePwList } = await pool.query<{ pw: string }>(
                 `
             UPDATE
                 account_local
@@ -437,12 +415,11 @@ router.put(
                 pw = $2
             WHERE
                 user_idx = $1
-            RETURNING *`,
+            RETURNING 
+                pw`,
                 [userIdx, hashedPw]
             );
-            if (updatePwList.length === 0) {
-                return res.status(204).send('비밀번호 변경 실패');
-            }
+            if (updatePwList.length === 0) throw new NoContentException('Fail change pw');
             return res.status(200).send('비밀번호 변경 성공');
         } catch (err) {
             next(err);
@@ -496,6 +473,7 @@ router.put(
         const { nickname, email }: { nickname: string; email: string } = req.body;
 
         try {
+            //
             const { rows: userList } = await pool.query<UserModel>(
                 `
             SELECT
@@ -508,11 +486,10 @@ router.put(
                 deleted_at IS NULL`,
                 [userIdx]
             );
-            if (userList.length === 0) return res.status(204).send('사용자 정보 조회 실패');
-
+            if (userList.length === 0) throw new NoContentException('Fail get info');
             //닉네임 중복 확인
 
-            const { rows: existingNicknameList } = await pool.query(
+            const { rows: existingNicknameList } = await pool.query<UserModel>(
                 `
             SELECT
                 *
@@ -529,7 +506,7 @@ router.put(
             if (existingNicknameList.length !== 0)
                 return res.status(409).send('닉네임이 이미 존재합니다.');
 
-            const { rows: existingEmailList } = await pool.query(
+            const { rows: existingEmailList } = await pool.query<UserModel>(
                 `
                 SELECT
                     *
@@ -545,7 +522,7 @@ router.put(
             );
             if (existingEmailList.length !== 0) throw new ConflictException('Existing email');
 
-            const { rows: userInfo } = await pool.query(
+            const { rows: userInfo } = await pool.query<UserModel>(
                 `
             UPDATE 
                 "user"
@@ -580,7 +557,12 @@ router.put('/image', checkLogin, uploadS3.single('image'), async (req, res, next
 
         await poolClient.query('BEGIN');
 
-        const { rows } = await pool.query(
+        const { rows } = await pool.query<{
+            idx: string;
+            user_idx: string;
+            img_path: string;
+            created_at: string;
+        }>(
             `SELECT
                 *
             FROM
@@ -632,17 +614,19 @@ router.delete('/', checkLogin, async (req, res, next) => {
     try {
         const { userIdx } = req.decoded;
 
-        await pool.query(
+        const { rows: idx } = await pool.query<{ idx: string }>(
             `
             UPDATE
                 "user"
             SET
                 deleted_at = now()
             WHERE
-                idx = $1`,
+                idx = $1
+            RETURNING
+                idx`,
             [userIdx]
         );
-
+        if (idx.length === 0) throw new NoContentException('Fail withdrawl');
         return res.status(200).send('회원 탈퇴 성공');
     } catch (err) {
         next(err);
@@ -656,10 +640,19 @@ router.get('/notification', checkLogin, async (req, res, next) => {
         const lastIdx = (req.query.lastidx as string) || '1';
 
         //사용자 알람조회
-        const { rows: notificationList } = await pool.query(
+        const { rows: notificationList } = await pool.query<{
+            idx: string;
+            type: string;
+            user_idx: string;
+            game_idx?: string;
+            post_idx?: string;
+            created_at: string;
+            post_title: string;
+            game_title: string;
+        }>(
             `
             SELECT
-                n.*,
+                n.idx, type, user_idx, game_idx, post_idx, created_at
                 p.title AS post_title,
                 g.title AS game_title
             FROM
@@ -764,8 +757,6 @@ router.get('/kakao/callback', async (req, res, next) => {
                 *
             FROM
                 account_kakao ak
-            JOIN
-                "user" u ON ak.user_idx = u.idx
             WHERE
                 ak.kakao_key = $1
             AND
