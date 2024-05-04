@@ -9,7 +9,7 @@ import accountApi from './routers/account';
 import gameApi from './routers/game';
 // import postApi from './routers/post';
 // import commentApi from './routers/comment';
-// import adminApi from './routers/admin';
+import adminApi from './routers/admin';
 
 const app = express();
 
@@ -23,7 +23,7 @@ app.use('/account', accountApi);
 app.use('/game', gameApi);
 // app.use('/post', postApi);
 // app.use('/comment', commentApi);
-// app.use('/admin', adminApi);
+app.use('/admin', adminApi);
 
 app.use((req: Request, res: Response, next: NextFunction) => {
     next({ status: 404, message: 'API 없음' });

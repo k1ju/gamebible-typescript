@@ -30,7 +30,7 @@ router.post(
             const selectGameSQLResult = await pool.query<GameModel>(
                 `
                 SELECT
-                    *
+                idx, user_idx as "userIdx", title, title_eng AS "titleEng", title_kor AS "titleKor", created_at AS "createdAt", deleted_at AS "deletedAt"
                 FROM
                     game
                 WHERE
@@ -68,7 +68,7 @@ router.get('/all', async (req, res, next) => {
     try {
         const { rows: gameList } = await pool.query<GameModel>(
             `SELECT 
-                *
+                idx, user_idx as "userIdx", title, title_eng AS "titleEng", title_kor AS "titleKor", created_at AS "createdAt", deleted_at AS "deletedAt"
             FROM 
                 game
             WHERE 
@@ -103,9 +103,9 @@ router.get('/all', async (req, res, next) => {
                 count: gameList.length,
                 gameList: gameList.map((game) => ({
                     idx: game.idx,
-                    userIdx: game.user_idx,
+                    userIdx: game.userIdx,
                     title: game.title,
-                    createdAt: game.created_at,
+                    createdAt: game.createdAt,
                 })),
             },
         });
@@ -448,8 +448,7 @@ router.post(
     uploadS3.array('images', 1),
     async (req, res, next) => {
         const historyIdx = req.params.historyidx;
-        const images = req.files;
-        console.log('images: ', images);
+        const images = req.files![0] as Express.MulterS3.File;
 
         try {
             if (!images) return res.status(400).send({ message: '이미지가 없습니다' });
@@ -458,10 +457,10 @@ router.post(
                 `INSERT INTO
                     game_img( history_idx, img_path )
                 VALUES ( $1, $2 ) `,
-                [historyIdx, images[0].location]
+                [historyIdx, images.location]
             );
 
-            res.status(201).send({ data: { location: images[0].location } });
+            res.status(201).send({ data: { location: images.location } });
         } catch (e) {
             next(e);
         }

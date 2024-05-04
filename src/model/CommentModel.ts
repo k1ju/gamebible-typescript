@@ -1,18 +1,16 @@
-export class GameModel {
+export class CommentModel {
     idx: string;
+    postIdx: string;
     userIdx: string;
-    title: string;
-    titleKor: string;
-    titleEng: string;
+    content: string;
     createdAt: string;
     deletedAt: string;
 
-    constructor(data: GameModel) {
+    constructor(data: CommentModel) {
         this.idx = data.idx;
+        this.postIdx = data.postIdx;
         this.userIdx = data.userIdx;
-        this.title = data.title;
-        this.titleKor = data.titleKor;
-        this.titleEng = data.titleEng;
+        this.content = data.content;
         this.createdAt = data.createdAt;
         this.deletedAt = data.deletedAt;
     }

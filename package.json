@@ -4,10 +4,10 @@
     "description": "",
     "main": "dist/server.js",
     "scripts": {
-        "build": "tsc --build",
-        "start": "tsc && node dist/server.js",
+        "start": "node dist/server.js",
         "clean": "tsc --build --clean",
-        "tsc": "tsc -p tsconfig.json",
+        "compile": "tsc",
+        "build": "tsc --build",
         "dev": "tsc --watch & NODE_ENV=development nodemon",
         "test": "tsc && ./node_modules/.bin/mocha dist/**/*.spec.js",
         "lint": "tslint 'src/**/*.ts' --fix"
@@ -33,6 +33,7 @@
         "@types/express": "^4.17.21",
         "@types/express-validator": "^3.0.0",
         "@types/jsonwebtoken": "^9.0.6",
+        "@types/multer": "^1.4.11",
         "@types/multer-s3": "^2.7.12",
         "@types/node": "^20.12.7",
         "@types/nodemailer": "^6.4.15",
