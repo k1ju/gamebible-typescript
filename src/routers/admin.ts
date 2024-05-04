@@ -254,4 +254,107 @@ router.delete('/game/request/:requestidx', checkLogin, checkAdmin, async (req, r
     }
 });
 
+//배너이미지 등록
+router.post(
+    '/game/:gameidx/banner',
+    checkLogin,
+    checkAdmin,
+    uploadS3.array('images', 1),
+    async (req, res, next) => {
+        const gameIdx: string = req.params.gameidx;
+        const images = req.files![0] as Express.MulterS3.File;
+
+        let poolClient: PoolClient | null = null;
+
+        try {
+            if (!images) throw new BadRequestException('No image');
+
+            poolClient = await pool.connect();
+            await poolClient.query(`BEGIN`);
+
+            //기존배너이미지 삭제
+            await poolClient.query(
+                `UPDATE 
+                    game_img_banner
+                SET 
+                    deleted_at = now()
+                WHERE 
+                    game_idx = $1
+                AND 
+                    deleted_at IS NULL`,
+                [gameIdx]
+            );
+            //새로운배너이미지 추가
+            await poolClient.query(
+                `INSERT INTO
+                    game_img_banner(game_idx, img_path)
+                VALUES
+                    ($1, $2)`,
+                [gameIdx, images.location]
+            );
+            await poolClient.query(`COMMIT`);
+
+            res.status(201).send();
+        } catch (e) {
+            if (poolClient) await poolClient.query(`ROLLBACK`);
+            next(e);
+        } finally {
+            if (poolClient) poolClient.release();
+        }
+    }
+);
+
+//대표이미지 등록하기
+router.post(
+    '/game/:gameidx/thumbnail',
+    checkLogin,
+    checkAdmin,
+    uploadS3.array('images', 1),
+    async (req, res, next) => {
+        const gameIdx = req.params.gameidx;
+        const images = req.files![0] as Express.MulterS3.File;
+
+        let poolClient: PoolClient | null = null;
+
+        try {
+            if (!images) throw new BadRequestException('No image');
+
+            poolClient = await pool.connect();
+
+            await poolClient.query(`BEGIN`);
+
+            //기존 썸네일 삭제
+            await poolClient.query(
+                `UPDATE
+                    game_img_thumbnail
+                SET
+                    deleted_at = now()
+                WHERE
+                    game_idx = $1
+                AND
+                    deleted_at IS NULL`,
+                [gameIdx]
+            );
+
+            //새로운 썸네일 등록
+            await poolClient.query(
+                `INSERT INTO
+                    game_img_thumbnail(game_idx, img_path)
+                VALUES 
+                    ( $1, $2 )`,
+                [gameIdx, images.location]
+            );
+
+            await poolClient.query(`COMMIT`);
+
+            res.status(201).send();
+        } catch (e) {
+            if (poolClient) await poolClient.query(`ROLLBACK`);
+            next(e);
+        } finally {
+            if (poolClient) poolClient.release();
+        }
+    }
+);
+
 export = router;

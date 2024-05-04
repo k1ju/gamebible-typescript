@@ -30,7 +30,7 @@ router.post(
             const selectGameSQLResult = await pool.query<GameModel>(
                 `
                 SELECT
-                    *
+                idx, user_idx as "userIdx", title, title_eng AS "titleEng", title_kor AS "titleKor", created_at AS "createdAt", deleted_at AS "deletedAt"
                 FROM
                     game
                 WHERE
@@ -68,7 +68,7 @@ router.get('/all', async (req, res, next) => {
     try {
         const { rows: gameList } = await pool.query<GameModel>(
             `SELECT 
-                *
+                idx, user_idx as "userIdx", title, title_eng AS "titleEng", title_kor AS "titleKor", created_at AS "createdAt", deleted_at AS "deletedAt"
             FROM 
                 game
             WHERE 
@@ -103,9 +103,9 @@ router.get('/all', async (req, res, next) => {
                 count: gameList.length,
                 gameList: gameList.map((game) => ({
                     idx: game.idx,
-                    userIdx: game.user_idx,
+                    userIdx: game.userIdx,
                     title: game.title,
-                    createdAt: game.created_at,
+                    createdAt: game.createdAt,
                 })),
             },
         });
