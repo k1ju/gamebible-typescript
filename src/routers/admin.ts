@@ -35,7 +35,7 @@ router.post(
         } = req.body;
         const { thumbnail, banner } = req.files as { [fieldname: string]: Express.MulterS3.File[] };
 
-        let poolClient: PoolClient | null;
+        let poolClient: PoolClient | null = null;
 
         try {
             if (!thumbnail[0] || !banner[0]) throw new BadRequestException('No image');
@@ -122,10 +122,10 @@ router.post(
 
             res.status(201).send();
         } catch (e) {
-            // if (poolClient) await poolClient.query('ROLLBACK');
+            if (poolClient) await poolClient.query('ROLLBACK');
             next(e);
         } finally {
-            // if (poolClient) poolClient.release();
+            if (poolClient) poolClient.release();
         }
     }
 );
