@@ -448,8 +448,7 @@ router.post(
     uploadS3.array('images', 1),
     async (req, res, next) => {
         const historyIdx = req.params.historyidx;
-        const images = req.files;
-        console.log('images: ', images);
+        const images = req.files![0] as Express.MulterS3.File;
 
         try {
             if (!images) return res.status(400).send({ message: '이미지가 없습니다' });
@@ -458,10 +457,10 @@ router.post(
                 `INSERT INTO
                     game_img( history_idx, img_path )
                 VALUES ( $1, $2 ) `,
-                [historyIdx, images[0].location]
+                [historyIdx, images.location]
             );
 
-            res.status(201).send({ data: { location: images[0].location } });
+            res.status(201).send({ data: { location: images.location } });
         } catch (e) {
             next(e);
         }
